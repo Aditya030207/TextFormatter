@@ -1,39 +1,54 @@
 # TextFormatter
 
-TextFormatter is a modern, responsive web application for quickly manipulating text. It features case conversions, style customization, live previews, and simulated translation. 
+React/Vite plain-text formatter with live preview, case conversion, clipboard copy,
+and LibreTranslate translation. All transformations change the actual text and
+survive plain-text copying. Font, size, and color controls have been removed;
+the existing CSS is unchanged.
 
-Built with React and Vite.
+## Run locally
 
-## Features
+Use Node.js 22.12 or newer.
 
-- **Live Preview**: See your text update in real-time as you type or change settings.
-- **Case Conversions**: Easily convert your text to UPPERCASE, lowercase, Title Case, Sentence case, PascalCase, camelCase, or snake_case.
-- **Typography & Style Control**: 
-  - Change fonts (Inter, Outfit, Courier New, Georgia, Cursive).
-  - Adjust font size dynamically.
-  - Choose text colors via an integrated color picker.
-- **Tools & Actions**: 
-  - Mock translation feature to demonstrate asynchronous tasks.
-  - Quick "Copy to Clipboard" functionality.
-  - "Clear" text function.
-- **Responsive Design**: Designed to work beautifully on both desktop and mobile devices.
+```sh
+npm ci
+cp .env.example .env
+npm run dev
+```
 
-## Getting Started
+Set `LIBRETRANSLATE_API_KEY` in `.env` to your LibreTranslate key. The default
+`https://libretranslate.com` service requires a key. Alternatively, set
+`LIBRETRANSLATE_URL` to your own LibreTranslate instance (which may not require a key).
+Restart the development server after changing configuration. Never prefix the key
+with `VITE_`: only the server should receive it.
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+Open the URL printed by Vite. Enter text, then choose a target language. The service
+automatically detects the source language. Supported languages load from the configured
+instance. Failed requests preserve the original text; edits made during a pending
+request take precedence over its result. Requests time out after 30 seconds and
+accept up to 10,000 characters (your provider may impose a lower limit).
 
-2. **Run the development server**:
-   ```bash
-   npm run dev
-   ```
+## Production
 
-3. Open `http://localhost:5173` in your browser.
+```sh
+npm run build
+npm start
+```
 
-## Built With
+The Node server serves `dist` and `/api/languages` and `/api/translate` on port 3001
+(or `PORT`). Configure the same environment variables on your hosting service.
+Use HTTPS so browser clipboard access works. Static-only hosting such as GitHub
+Pages cannot run the server: it needs a Node-capable host or equivalent backend
+routes. The API key is never included in the browser build.
 
-- [React](https://reactjs.org/)
-- [Vite](https://vitejs.dev/)
-- [Inter & Outfit Fonts](https://fonts.google.com/)
+## Validation
+
+```sh
+npm test
+npm run build
+npm run lint
+```
+
+API tests use mocked upstream responses; a valid key or running self-hosted instance
+is needed for a real translation smoke test.
+
+[LibreTranslate API documentation](https://docs.libretranslate.com/guides/api_usage/)

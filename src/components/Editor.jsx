@@ -1,6 +1,5 @@
-import React from 'react';
 
-const Editor = ({ text, setText, fontFamily, fontSize, color }) => {
+const Editor = ({ text, setText }) => {
     const charCount = text.length;
     const wordCount = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
 
@@ -26,11 +25,7 @@ const Editor = ({ text, setText, fontFamily, fontSize, color }) => {
                 <div
                     id="livePreview"
                     className="preview-box"
-                    style={{
-                        fontFamily: fontFamily,
-                        fontSize: `${fontSize}px`,
-                        color: color
-                    }}
+
                 >
                     {text || "Start typing to see the preview..."}
                 </div>

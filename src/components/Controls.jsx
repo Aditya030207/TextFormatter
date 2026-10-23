@@ -1,35 +1,44 @@
-import React from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getLanguages, translateText } from '../translation.js';
 
-const Controls = ({
-    text,
-    setText,
-    fontFamily,
-    setFontFamily,
-    fontSize,
-    setFontSize,
-    color,
-    setColor,
-}) => {
+const Controls = ({ text, setText }) => {
+    const [languages, setLanguages] = useState([]);
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('Loading translation languages…');
+    const request = useRef(null);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        getLanguages(controller.signal).then((items) => {
+            setLanguages(items);
+            setMessage('');
+        }).catch((error) => {
+            if (!controller.signal.aborted) setMessage(error.message);
+        });
+        return () => {
+            controller.abort();
+            request.current?.abort();
+        };
+    }, []);
+
     // Case Conversion Handlers
     const toUpperCase = () => setText(text.toUpperCase());
     
     const toLowerCase = () => setText(text.toLowerCase());
     
     const toTitleCase = () => {
-        const titleCase = text.toLowerCase().split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
+        const titleCase = text.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase());
         setText(titleCase);
     };
     
     const toSentenceCase = () => {
         const lowerText = text.toLowerCase();
-        const sentenceCase = lowerText.charAt(0).toUpperCase() + lowerText.slice(1);
+        const sentenceCase = lowerText.replace(/(^\s*|[.!?]\s+)(\p{L})/gu, (_, prefix, letter) => prefix + letter.toUpperCase());
         setText(sentenceCase);
     };
     
     const toPascalCase = () => {
-        const pascalCase = text.toLowerCase().split(/[^a-zA-Z0-9]/)
+        const pascalCase = text.toLowerCase().split(/[^\p{L}\p{N}]+/u)
             .filter(word => word.length > 0)
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join('');
@@ -37,7 +46,7 @@ const Controls = ({
     };
     
     const toCamelCase = () => {
-        const words = text.toLowerCase().split(/[^a-zA-Z0-9]/).filter(word => word.length > 0);
+        const words = text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(word => word.length > 0);
         const camelCase = words.map((word, index) => {
             if (index === 0) return word;
             return word.charAt(0).toUpperCase() + word.slice(1);
@@ -51,13 +60,14 @@ const Controls = ({
     };
 
     // Tools & Actions Handlers
-    const copyText = () => {
+    const copyText = async () => {
         if (!text) return;
-        navigator.clipboard.writeText(text).then(() => {
-            alert("Text copied to clipboard!");
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-        });
+        try {
+            await navigator.clipboard.writeText(text);
+            setMessage('Text copied to clipboard!');
+        } catch {
+            setMessage('Could not copy automatically. Select the text and use Ctrl+C or Cmd+C.');
+        }
     };
 
     const clearText = () => {
@@ -66,24 +76,25 @@ const Controls = ({
         }
     };
 
-    const mockTranslate = (e) => {
-        const lang = e.target.value;
-        if (!text || lang === 'en') return;
-
-        const suffixMap = {
-            'es': ' [Translated to Spanish]',
-            'fr': ' [Translated to French]',
-            'de': ' [Translated to German]',
-            'jp': ' [Translated to Japanese]'
-        };
-
-        setText("Translating...");
-
-        setTimeout(() => {
-            setText(text + suffixMap[lang]);
-            alert(`Mock Translation to ${lang.toUpperCase()} completed!\n(Note: This is a demo feature without a real backend)`);
-            e.target.value = 'en'; // reset select
-        }, 500);
+    const translate = async (event) => {
+        const target = event.target.value;
+        event.target.value = '';
+        if (!text.trim() || !target || busy) return;
+        const original = text;
+        const controller = new AbortController();
+        request.current = controller;
+        setBusy(true);
+        setMessage('Translating…');
+        try {
+            const translated = await translateText(original, target, controller.signal);
+            // Never overwrite edits, case conversions, or a clear made while waiting.
+            setText(current => current === original ? translated : current);
+            setMessage('Translation finished. If you edited the text while waiting, your edits were kept.');
+        } catch (error) {
+            if (!controller.signal.aborted) setMessage(error.message);
+        } finally {
+            if (!controller.signal.aborted) setBusy(false);
+        }
     };
 
     return (
@@ -102,61 +113,23 @@ const Controls = ({
             </div>
 
             <div className="control-group">
-                <h3>Typography & Style</h3>
-                <div className="style-inputs">
-                    <div className="input-wrapper">
-                        <label>Font Family</label>
-                        <select 
-                            value={fontFamily} 
-                            onChange={(e) => setFontFamily(e.target.value)}
-                        >
-                            <option value="'Inter', sans-serif">Inter (Sans-serif)</option>
-                            <option value="'Outfit', sans-serif">Outfit (Modern)</option>
-                            <option value="'Courier New', monospace">Courier New (Monospace)</option>
-                            <option value="'Georgia', serif">Georgia (Serif)</option>
-                            <option value="'Cursive', fantasy">Cursive (Handwritten)</option>
-                        </select>
-                    </div>
-
-                    <div className="input-wrapper">
-                        <label>Font Size (px)</label>
-                        <input 
-                            type="number" 
-                            value={fontSize} 
-                            min="10" 
-                            max="60"
-                            onChange={(e) => setFontSize(e.target.value)}
-                        />
-                    </div>
-
-                    <div className="input-wrapper">
-                        <label>Color</label>
-                        <input 
-                            type="color" 
-                            value={color} 
-                            onChange={(e) => setColor(e.target.value)}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <div className="control-group">
                 <h3>Tools & Actions</h3>
                 <div className="actions-grid">
                     <div className="input-wrapper full-width">
-                        <label>Translate To (Mock)</label>
-                        <select onChange={mockTranslate} defaultValue="en">
-                            <option value="en">English (Original)</option>
-                            <option value="es">Spanish</option>
-                            <option value="fr">French</option>
-                            <option value="de">German</option>
-                            <option value="jp">Japanese</option>
+                        <label htmlFor="translateTarget">Translate To</label>
+                        <select id="translateTarget" onChange={translate} defaultValue=""
+                            disabled={busy || !text.trim() || languages.length === 0}>
+                            <option value="" disabled>{busy ? 'Translating…' : 'Choose a language'}</option>
+                            {languages.map(language => (
+                                <option key={language.code} value={language.code}>{language.name}</option>
+                            ))}
                         </select>
                     </div>
                     <button className="btn btn-primary" onClick={copyText}>Copy Text</button>
                     <button className="btn btn-danger" onClick={clearText}>Clear</button>
                 </div>
             </div>
+            <p role="status" aria-live="polite">{message}</p>
         </div>
     );
 };
