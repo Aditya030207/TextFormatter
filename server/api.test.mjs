@@ -3,60 +3,67 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { createApiHandler } from './api.mjs';
 
-async function call(options, path = '/api/translate', body = { q: 'Hello', target: 'ja' }, method = 'POST') {
+async function call(fetchImpl, body = { q: 'Hello', source: 'en', target: 'es' }, path = '/api/translate', method = 'POST') {
     const req = Readable.from([typeof body === 'string' ? body : JSON.stringify(body)]);
     req.url = path;
     req.method = method;
     let status, data;
-    await createApiHandler(options)(req, {
+    await createApiHandler({ fetchImpl })(req, {
         writeHead(code) { status = code; },
         end(value) { data = JSON.parse(value); },
     });
     return { status, data };
 }
+const success = () => Response.json({ responseStatus: 200, responseData: { translatedText: 'Hola' } });
+const noFetch = () => assert.fail('Must not call provider');
 
-test('sends auto-detected plain text and server key; returns only translation', async () => {
-    const result = await call({ apiKey: 'server-secret', fetchImpl: async (url, options) => {
-        assert.equal(url, 'https://libretranslate.com/translate');
-        assert.deepEqual(JSON.parse(options.body), { q: 'Hello', source: 'auto', target: 'ja', format: 'text', api_key: 'server-secret' });
-        return Response.json({ translatedText: 'こんにちは', other: 'private' });
-    } });
-    assert.deepEqual(result, { status: 200, data: { translatedText: 'こんにちは' } });
+test('uses documented anonymous endpoint with explicit languages and encoded text', async () => {
+    const result = await call(async url => {
+        assert.equal(url.origin, 'https://api.mymemory.translated.net');
+        assert.equal(url.pathname, '/get');
+        assert.equal(url.searchParams.get('q'), 'Hello & goodbye?');
+        assert.equal(url.searchParams.get('langpair'), 'en|es');
+        assert.equal(url.searchParams.size, 2);
+        return success();
+    }, { q: 'Hello & goodbye?', source: 'en', target: 'es' });
+    assert.deepEqual(result, { status: 200, data: { translatedText: 'Hola' } });
 });
 
-test('missing hosted key is actionable and makes no upstream request', async () => {
-    const result = await call({ apiKey: '', fetchImpl: () => assert.fail('Must not fetch') });
-    assert.equal(result.status, 503);
-    assert.match(result.data.error, /API key/);
+test('returns language menu without network and accepts same-language text locally', async () => {
+    const result = await call(noFetch, '', '/api/languages', 'GET');
+    assert.ok(result.data.some(item => item.code === 'hi'));
+    assert.equal((await call(noFetch, { q: 'Hello', source: 'en', target: 'en' })).data.translatedText, 'Hello');
 });
 
-test('self-hosting permits no key and languages come from the instance', async () => {
-    const result = await call({ baseUrl: 'http://localhost:5000', fetchImpl: async () =>
-        Response.json([{ code: 'ja', name: 'Japanese', targets: ['en'] }]) }, '/api/languages', '', 'GET');
-    assert.deepEqual(result.data, [{ code: 'ja', name: 'Japanese' }]);
+test('enforces UTF-8 byte boundary without truncating', async () => {
+    assert.equal((await call(success, { q: 'é'.repeat(250), source: 'fr', target: 'en' })).status, 200);
+    assert.equal((await call(noFetch, { q: 'é'.repeat(251), source: 'fr', target: 'en' })).status, 413);
+    assert.equal((await call(noFetch, { q: 'a'.repeat(501), source: 'en', target: 'es' })).status, 413);
 });
 
-test('upstream failures are safe and actionable', async () => {
-    for (const [status, expected] of [[403, /API key/], [429, /limit/], [500, /unavailable/]]) {
-        const result = await call({ apiKey: 'secret', fetchImpl: async () => new Response('secret internal error', { status }) });
-        assert.match(result.data.error, expected);
-        assert.doesNotMatch(JSON.stringify(result.data), /secret/);
+test('validates source, target, input, paragraphs, methods and routes', async () => {
+    for (const body of ['{', null, { q: ' ', source: 'en', target: 'es' }, { q: 'hello', source: 'auto', target: 'es' }, { q: 'hello', source: 'en', target: 'invalid' }, { q: 'One\n\nTwo', source: 'en', target: 'es' }]) {
+        assert.equal((await call(noFetch, body)).status, 400);
+    }
+    assert.equal((await call(noFetch, {}, '/api/translate', 'GET')).status, 405);
+    assert.equal((await call(noFetch, {}, '/api/unknown')).status, 404);
+});
+
+test('handles quota failures in HTTP and successful HTTP response bodies', async () => {
+    for (const response of [new Response('', { status: 429 }), Response.json({ quotaFinished: true, responseStatus: 200, responseData: { translatedText: 'quota error' } }), Response.json({ responseStatus: '429' })]) {
+        const result = await call(async () => response);
+        assert.equal(result.status, 429);
+        assert.equal(result.data.translatedText, undefined);
     }
 });
 
-test('rejects malformed, blank, oversized input and wrong methods', async () => {
-    const options = { apiKey: 'secret', fetchImpl: () => assert.fail('Must not fetch') };
-    for (const body of ['{', null, { q: ' ', target: 'en' }, { q: 'x'.repeat(10001), target: 'en' }, { q: 'hi', target: '../../secret' }]) {
-        assert.equal((await call(options, '/api/translate', body)).status, 400);
-    }
-    assert.equal((await call(options, '/api/translate', {}, 'GET')).status, 405);
-});
-
-test('handles timeout, network failures and invalid upstream responses', async () => {
-    for (const [fetchImpl, status] of [
-        [async () => { throw new DOMException('timeout', 'TimeoutError'); }, 504],
-        [async () => { throw new Error('network'); }, 502],
-        [async () => Response.json({}), 502],
-        [async () => new Response('<html>failure</html>'), 502],
-    ]) assert.equal((await call({ apiKey: 'secret', fetchImpl })).status, status);
+test('never treats provider errors or malformed output as translated text', async () => {
+    for (const fetchImpl of [
+        async () => new Response('', { status: 500 }),
+        async () => Response.json({ responseStatus: 403, responseData: { translatedText: 'INVALID LANGUAGE PAIR' } }),
+        async () => Response.json({ responseStatus: 200, responseData: {} }),
+        async () => new Response('<html>failure</html>'),
+        async () => { throw new Error('network'); },
+    ]) assert.equal((await call(fetchImpl)).status, 502);
+    assert.equal((await call(async () => { throw new DOMException('timeout', 'TimeoutError'); })).status, 504);
 });

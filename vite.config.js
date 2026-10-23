@@ -1,13 +1,9 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createApiHandler } from './server/api.mjs'
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '')
-  const api = createApiHandler({
-    baseUrl: env.LIBRETRANSLATE_URL || 'https://libretranslate.com',
-    apiKey: env.LIBRETRANSLATE_API_KEY || '',
-  })
+export default defineConfig(() => {
+  const api = createApiHandler()
   const middleware = server => {
     server.middlewares.use('/api', (req, res) => {
       req.url = `/api${req.url}`

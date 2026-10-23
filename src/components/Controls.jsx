@@ -3,6 +3,7 @@ import { getLanguages, translateText } from '../translation.js';
 
 const Controls = ({ text, setText }) => {
     const [languages, setLanguages] = useState([]);
+    const [source, setSource] = useState('en');
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('Loading translation languages…');
     const request = useRef(null);
@@ -86,7 +87,7 @@ const Controls = ({ text, setText }) => {
         setBusy(true);
         setMessage('Translating…');
         try {
-            const translated = await translateText(original, target, controller.signal);
+            const translated = await translateText(original, source, target, controller.signal);
             // Never overwrite edits, case conversions, or a clear made while waiting.
             setText(current => current === original ? translated : current);
             setMessage('Translation finished. If you edited the text while waiting, your edits were kept.');
@@ -116,6 +117,15 @@ const Controls = ({ text, setText }) => {
                 <h3>Tools & Actions</h3>
                 <div className="actions-grid">
                     <div className="input-wrapper full-width">
+                        <label htmlFor="translateSource">Translate From</label>
+                        <select id="translateSource" value={source} disabled={busy || languages.length === 0}
+                            onChange={event => setSource(event.target.value)}>
+                            {languages.map(language => (
+                                <option key={language.code} value={language.code}>{language.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="input-wrapper full-width">
                         <label htmlFor="translateTarget">Translate To</label>
                         <select id="translateTarget" onChange={translate} defaultValue=""
                             disabled={busy || !text.trim() || languages.length === 0}>
@@ -125,6 +135,7 @@ const Controls = ({ text, setText }) => {
                             ))}
                         </select>
                     </div>
+                    <p className="full-width">Free translation by MyMemory: one paragraph, up to 500 UTF-8 bytes per translation. Daily limits apply.</p>
                     <button className="btn btn-primary" onClick={copyText}>Copy Text</button>
                     <button className="btn btn-danger" onClick={clearText}>Clear</button>
                 </div>

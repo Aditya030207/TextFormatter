@@ -1,64 +1,60 @@
 # TextFormatter
 
-React/Vite plain-text formatter with live preview, case conversion, clipboard copy,
-and LibreTranslate translation. All transformations change the actual text and
-survive plain-text copying. Font, size, and color controls have been removed;
-the existing CSS is unchanged.
+React/Vite plain-text formatter with case conversion, live preview, clipboard copy,
+and free MyMemory translation. Font, size, and color controls were removed because
+they did not survive plain-text copying. Existing CSS is unchanged.
 
-## Run locally
+## Local development
 
-Use Node.js 22.12 or newer.
+Use Node.js 22.12 or newer:
 
 ```sh
 npm ci
-cp .env.example .env
 npm run dev
 ```
 
-Set `LIBRETRANSLATE_API_KEY` in `.env` to your LibreTranslate key. The default
-`https://libretranslate.com` service requires a key. Alternatively, set
-`LIBRETRANSLATE_URL` to your own LibreTranslate instance (which may not require a key).
-Restart the development server after changing configuration. Never prefix the key
-with `VITE_`: only the server should receive it.
+No API key, account, or environment variables are required. Enter text, select its
+language in **Translate From**, then select **Translate To**. The source language
+must be selected explicitly; automatic detection is not supported by this integration.
 
-Open the URL printed by Vite. Enter text, then choose a target language. The service
-automatically detects the source language. Supported languages load from the configured
-instance. Failed requests preserve the original text; edits made during a pending
-request take precedence over its result. Requests time out after 30 seconds and
-accept up to 10,000 characters (your provider may impose a lower limit).
+## Translation limits
 
-## Deploy on Netlify
+MyMemory allows anonymous use up to **5,000 characters per day** and **500 UTF-8
+bytes per request**. Non-ASCII characters can occupy several bytes. Translate one
+short paragraph at a time. Longer input is rejected with a clear message, never
+truncated. These limits apply only to translation; editing, case conversion and
+copying still work on longer text. The free quota may be shared by requests using
+the same Netlify outbound IP, so availability is not guaranteed per visitor.
 
-The included `netlify.toml` builds the Vite frontend into `dist` and deploys the
-translation backend as a Netlify Function. Both `/api/languages` and
-`/api/translate` are handled by that function, so no separate server is needed.
+Text is sent to MyMemory only when translation is requested. This integration uses
+its `/get` endpoint, not the contribution endpoints. It sends no email, key, or
+visitor IP parameter. Provider failures, timeouts and quota errors preserve the
+original text. Edits made during an in-flight request take precedence over results.
 
-1. In your Netlify project, open **Project configuration → Environment variables**.
-2. Add `LIBRETRANSLATE_API_KEY` with your hosted LibreTranslate key. Include the
-   **Functions** scope (or all scopes) and the deployment contexts you want to use.
-3. Optional: set `LIBRETRANSLATE_URL` for your own instance instead of the default
-   `https://libretranslate.com`; a self-hosted instance may not need a key.
-4. Deploy the updated branch (or merge the PR to your production branch) and
-   trigger a new deployment after any environment-variable changes.
+- [MyMemory API specification](https://mymemory.translated.net/doc/spec.php)
+- [Usage limits](https://mymemory.translated.net/doc/usagelimits.php)
+- [Service terms](https://mymemory.translated.net/terms-and-conditions)
 
-Never put the secret in `netlify.toml` or use a `VITE_` prefix. Without a hosted
-API key or a configured self-hosted service, translation will show a setup error.
-Netlify hosting does not provide a LibreTranslate key.
+## Netlify deployment
 
-[Netlify function environment variables](https://docs.netlify.com/build/functions/environment-variables/)
+Deploy this repository with the included `netlify.toml`. It runs `npm run build`,
+publishes `dist`, and deploys the Netlify Function handling `/api/languages` and
+`/api/translate`. No translation secrets or separate backend setup are needed.
+The language endpoint returns the application's curated language menu.
 
-## Other Node hosting
+Merge the PR into your production branch to trigger a Git-connected Netlify deploy,
+or deploy this branch as a preview. Old LibreTranslate environment variables are
+unused and can be removed from Netlify if you added them.
+
+## Optional standalone Node hosting
 
 ```sh
 npm run build
 npm start
 ```
 
-The Node server serves `dist` and `/api/languages` and `/api/translate` on port 3001
-(or `PORT`). Configure the same environment variables on your hosting service.
-Use HTTPS so browser clipboard access works. Static-only hosting such as GitHub
-Pages cannot run the server: it needs a Node-capable host or equivalent backend
-routes. The API key is never included in the browser build.
+The server serves the frontend and API on port 3001 (or `PORT`). Use HTTPS for
+clipboard access outside localhost.
 
 ## Validation
 
@@ -68,7 +64,4 @@ npm run build
 npm run lint
 ```
 
-API tests use mocked upstream responses; a valid key or running self-hosted instance
-is needed for a real translation smoke test.
-
-[LibreTranslate API documentation](https://docs.libretranslate.com/guides/api_usage/)
+Automated API tests mock the provider, including UTF-8 limits, errors and quotas.

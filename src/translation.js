@@ -25,11 +25,11 @@ export async function getLanguages(signal) {
     return data;
 }
 
-export async function translateText(text, target, signal) {
+export async function translateText(text, source, target, signal) {
     const data = await request('translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: text, target }),
+        body: JSON.stringify({ q: text, source, target }),
         signal,
     });
     if (typeof data.translatedText !== 'string') {
