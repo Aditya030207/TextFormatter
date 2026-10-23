@@ -27,7 +27,27 @@ instance. Failed requests preserve the original text; edits made during a pendin
 request take precedence over its result. Requests time out after 30 seconds and
 accept up to 10,000 characters (your provider may impose a lower limit).
 
-## Production
+## Deploy on Netlify
+
+The included `netlify.toml` builds the Vite frontend into `dist` and deploys the
+translation backend as a Netlify Function. Both `/api/languages` and
+`/api/translate` are handled by that function, so no separate server is needed.
+
+1. In your Netlify project, open **Project configuration → Environment variables**.
+2. Add `LIBRETRANSLATE_API_KEY` with your hosted LibreTranslate key. Include the
+   **Functions** scope (or all scopes) and the deployment contexts you want to use.
+3. Optional: set `LIBRETRANSLATE_URL` for your own instance instead of the default
+   `https://libretranslate.com`; a self-hosted instance may not need a key.
+4. Deploy the updated branch (or merge the PR to your production branch) and
+   trigger a new deployment after any environment-variable changes.
+
+Never put the secret in `netlify.toml` or use a `VITE_` prefix. Without a hosted
+API key or a configured self-hosted service, translation will show a setup error.
+Netlify hosting does not provide a LibreTranslate key.
+
+[Netlify function environment variables](https://docs.netlify.com/build/functions/environment-variables/)
+
+## Other Node hosting
 
 ```sh
 npm run build
